@@ -1,23 +1,21 @@
 mod test;
 
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncReadExt, AsyncWriteExt, BufReader},
     net::TcpListener,
 };
 
 #[tokio::main]
 async fn main() {
-    let args = std::env::args().collect::<Vec<String>>();
-    let server_conf = args.get(1);
-    let server_conf = match server_conf {
-        None => "127.0.0.1:8080",
-        Some(conf) => conf,
+    let args = match std::env::args().nth(1) {
+        None => "127.0.0.1:8080".to_string(),
+        Some(adrr) => adrr,
     };
 
-    run(server_conf).await;
+    run(args).await;
 }
 
-async fn run(config: &str) {
+async fn run(config: String) {
     let listener = TcpListener::bind(config).await.unwrap();
     println!("Server has started");
 
@@ -31,18 +29,31 @@ async fn run(config: &str) {
 
             let mut reader = BufReader::new(reader);
             // TODO: add logs
-            let mut line = String::new();
+            let mut buffer = [0; 1024];
 
             loop {
-                let bytes_read = reader.read_line(&mut line).await.unwrap();
+                let bytes_read = match reader.read(&mut buffer).await {
+                    Ok(n) if n == 0 => {
+                        println!("User {} has disconected", _addr);
+                        return;
+                    }
+                    Ok(n) => n,
+                    Err(err) => {
+                        eprintln!("Failed to read: {}", err);
+                        return;
+                    }
+                };
+
                 if bytes_read == 0 {
                     // close condition
                     println!("User {} has disconected", _addr);
                     break;
                 }
 
-                writer.write_all(line.as_bytes()).await.unwrap();
-                line.clear();
+                if let Err(e) = writer.write_all(&buffer[..bytes_read]).await {
+                    eprintln!("Failed to write: {}", e);
+                    return;
+                }
             }
         });
     }
