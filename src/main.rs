@@ -1,7 +1,7 @@
 mod test;
 
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt, BufReader},
+    // io::{AsyncReadExt, AsyncWriteExt, BufReader},
     net::TcpListener,
 };
 
@@ -25,34 +25,13 @@ async fn run(config: String) {
 
         tokio::spawn(async move {
             println!("User {} has connected!", _addr);
-            let (reader, mut writer) = socket.split();
+            let (mut reader, mut writer) = socket.split();
 
-            let mut reader = BufReader::new(reader);
-            // TODO: add logs
-            let mut buffer = [0; 1024];
 
             loop {
-                let bytes_read = match reader.read(&mut buffer).await {
-                    Ok(n) if n == 0 => {
-                        println!("User {} has disconected", _addr);
-                        return;
-                    }
-                    Ok(n) => n,
-                    Err(err) => {
-                        eprintln!("Failed to read: {}", err);
-                        return;
-                    }
-                };
 
-                if bytes_read == 0 {
-                    // close condition
-                    println!("User {} has disconected", _addr);
-                    break;
-                }
-
-                if let Err(e) = writer.write_all(&buffer[..bytes_read]).await {
-                    eprintln!("Failed to write: {}", e);
-                    return;
+                if tokio::io::copy(&mut reader, &mut writer).await.is_err() {
+                    eprintln!("Failed to copy data from reader to writer");
                 }
             }
         });
