@@ -1,39 +1,23 @@
+mod echo_server;
+mod proxy;
 mod test;
-
-use tokio::{
-    // io::{AsyncReadExt, AsyncWriteExt, BufReader},
-    net::TcpListener,
-};
 
 #[tokio::main]
 async fn main() {
-    let args = match std::env::args().nth(1) {
-        None => "127.0.0.1:8080".to_string(),
-        Some(adrr) => adrr,
-    };
+    let args = std::env::args()
+        .nth(1)
+        .unwrap_or("127.0.0.1:8080".to_string());
+    let serv_addr: std::net::SocketAddr = args.parse().unwrap();
 
-    run(args).await;
-}
+    tracing_subscriber::fmt()
+        .with_target(true)
+        .with_max_level(tracing::Level::INFO)
+        .init();
 
-async fn run(config: String) {
-    let listener = TcpListener::bind(config).await.unwrap();
-    println!("Server has started");
+    // start echo server
+    tokio::spawn(echo_server::start_server(args.clone()));
 
-    loop {
-        // Allow multiple connections
-        let (mut socket, _addr) = listener.accept().await.unwrap();
-
-        tokio::spawn(async move {
-            println!("User {} has connected!", _addr);
-            let (mut reader, mut writer) = socket.split();
-
-
-            loop {
-
-                if tokio::io::copy(&mut reader, &mut writer).await.is_err() {
-                    eprintln!("Failed to copy data from reader to writer");
-                }
-            }
-        });
-    }
+    tokio::spawn(proxy::start_proxy("127.0.0.1:8070".to_string(), serv_addr))
+        .await
+        .unwrap();
 }
